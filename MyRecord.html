@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Recorder</title>
+  <script>
+    // Define UUID global variables
+    const primaryServiceUUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+    const characteristicUUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+
+
+    const buttonsFromBinary = (buttons) => Number(buttons).toString(2).padStart(16, "0").slice(0, 16)
+
+    var gserver = null;
+    var gcharacteristic = null;
+    var gservice = null;
+    var liveAction = false;
+    var AckResponse = 0;
+    var ButtonRecordArray = [];
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+
+    async function lightonButtonWhenPressed(btn_number, setColor, replay) 
+    {
+      if (replay == false) {
+        var path_id = 'micro_btn_id_' + btn_number
+      }
+      else {
+        var path_id = 'micro_btn_replay_id_' + btn_number
+      }
+      
+      var svg_path = document.getElementById(path_id)
+      if (svg_path) {
+        if (setColor == true) {
+          svg_path.style.fill = 'orange'  // fill color
+          svg_path.style.stroke = 'orange' // border color
+        }
+        else {
+          svg_path.style.fill = 'none'
+          svg_path.style.stroke = 'black'
+        }
+      }
+      else {
+        console.log("path not found")
+      }
+    }
+
+    function handleNotifications(event) 
+    {
+      const value = event.target.value;
+      console.log("value  :", value);
+      var inputData = new Uint8Array(value.buffer);
+
+      // var v1 = '';
+      // for (var i = 0; i < inputData.byteLength; i++) {
+      //   v1 += inputData[i].toString(16).toUpperCase().padStart(2, '0');
+      //   v1 += ' ';
+      // }
+
+      // console.log("v1  :", v1);
+
+      if ((inputData[1] == 0x32) && (liveAction == true) && (inputData[3] == 0x31)) 
+      {
+        let res = (inputData[8] << 24) | (inputData[7] << 16) | (inputData[6] << 8) | inputData[5];
+        console.log(res, buttonsFromBinary(res));
+        
+        // Get the time difference of button press since the start of video recording
+        let currentTime = new Date().getTime();
+        let timeDiff = currentTime - startTime;
+        // console.log("Time Diff: ", timeDiff);
+
+        // Create a json object and add the time difference and the button press value
+        ButtonRecordArray.push({
+          "time": timeDiff,
+          "button": res
+        });
+
+
+        // document.querySelector('#ButtonReceivedData').textContent = res;
+        for (var i = 0; i < 12; i++) {
+          if (res & (1 << i)) {
+            lightonButtonWhenPressed((i + 1), true, false);
+          }
+          else {
+            lightonButtonWhenPressed((i + 1), false, false);
+          }
+        }
+      }
+
+    }
+
+    document.addEventListener('DOMContentLoaded', (event) => {
+      document.querySelector('#scan').addEventListener('click', function () {
+        navigator.bluetooth.requestDevice({ filters: [{ services: [primaryServiceUUID] }] })
+          .then(device => {
+            var option = document.createElement('option');
+            option.text = device.name;
+            option.value = device.id;
+            document.querySelector('#devices').add(option);
+
+            // Connect to GATT server
+            device.gatt.connect()
+              .then(server => {
+                gserver = server;
+                console.log('Connected to GATT server');
+                // Get characteristics by UUID
+                return server.getPrimaryService(primaryServiceUUID);
+              })
+              .then(service => {
+                gservice = service;
+                return service.getCharacteristic(characteristicUUID);
+              })
+              .then(characteristic => {
+                gcharacteristic = characteristic;
+
+                // Read the value of the characteristic
+                characteristic.startNotifications()
+                  .then(() => {
+                    console.log('Notifications enabled for characteristic');
+                    // Handle notifications
+                    characteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+                  })
+                  .catch(error => {
+                    console.log('Failed to enable notifications for characteristic:', error);
+                  });
+              })
+          })
+          .catch(error => { console.log(error); });
+      });
+
+      document.querySelector('#Start_Stop_live_Action').addEventListener('click', function () {
+        if (liveAction == false) {
+          liveAction = true;
+          document.querySelector('#Start_Stop_live_Action').textContent = "Stop Live Logging";
+          const command = Uint8Array.of(0x24, 0x32, 0x02, 0x01, 0x01, 0x23);
+          gcharacteristic.writeValue(command)
+            .then(() => {
+              console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+              console.log('Failed to write value to characteristic:', error);
+            });
+        } else {
+          liveAction = false;
+          document.querySelector('#Start_Stop_live_Action').textContent = "Start Live Logging";
+          const command = Uint8Array.of(0x24, 0x32, 0x02, 0x01, 0x00, 0x23);
+          gcharacteristic.writeValue(command)
+            .then(() => {
+              console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+              console.log('Failed to write value to characteristic:', error);
+            });
+        }
+
+      });
+
+
+    });
+  </script>
+  <style>
+    .micro_video_container {
+      display: grid;
+      grid-template-columns: 50vw 50vw;
+      gap: 5px;
+    }
+
+    .micro_video_container_childs {
+      /* width: 100%; */
+      height: 90vh;
+    }
+  </style>
+</head>
+
+<body>
+  <div>
+    Select video input and BLE device: <select id="video-select"></select>
+    <button id="scan">Scan for devices</button>
+    <select id="devices"></select>
+  </div>
+
+  <div class="micro_video_container">
+    <div class="micro_video_container_childs">
+      <div style="align-items: center; background-color: rgb(190, 192, 230);">
+        <video id="video_record" autoplay width="100%" height="100%"> </video>
+        <!-- <video id="video" autoplay > </video>/ -->
+      </div>
+
+
+      <div style="height: 1px;">
+        <svg style="margin-top: -26rem; margin-left: -35rem; z-index: 123123;" width="1990px" height="2660px" stroke =#000000
+          viewBox="0.00000000 0.00000000 12 60" version="1.1" xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+          <g inkscape:groupmode="layer" id="85667243-1302-4a85-b3ac-c7bf39b332ec" inkscape:label="Toolpath Previews"
+            style="stroke:#000000;" />
+          <g inkscape:groupmode="layer" id="6554092a-16f5-47d7-b7be-55067ae167c6" inkscape:label="main"
+            style="stroke:#000000;">
+            <path
+              style="fill:transparent;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 4.610144,8.773670 A 0.500000,0.500000 0 0,0 5.110144,9.273670 L 14.110144,9.273670 A 0.500000,0.500000 0 0,0 14.610144,8.773670 L 14.610144,4.773670 A 0.500000,0.500000 0 0,0 14.110144,4.273670 L 5.110144,4.273670 A 0.500000,0.500000 0 0,0 4.610144,4.773670 L 4.610144,8.773670 " />
+            <path id="micro_btn_id_1"
+              style='fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;'
+              d="M 6.604306,5.285865 A 0.495000,0.495000 0 0,1 7.099306,5.780865 A 0.495000,0.495000 0 0,1 6.604306,6.275865 A 0.495000,0.495000 0 0,1 6.109306,5.780865 A 0.495000,0.495000 0 0,1 6.604306,5.285865 " />
+            <path id="micro_btn_id_2"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 7.816004,5.285865 A 0.495000,0.495000 0 0,1 8.311004,5.780865 A 0.495000,0.495000 0 0,1 7.816004,6.275865 A 0.495000,0.495000 0 0,1 7.321004,5.780865 A 0.495000,0.495000 0 0,1 7.816004,5.285865 " />
+            <path id="micro_btn_id_3"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 8.875193,5.890090 A 0.495000,0.495000 0 0,1 9.370193,6.385090 A 0.495000,0.495000 0 0,1 8.875193,6.880090 A 0.495000,0.495000 0 0,1 8.380193,6.385090 A 0.495000,0.495000 0 0,1 8.875193,5.890090 " />
+            <path id="micro_btn_id_11"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 9.878233,6.580152 C 10.151614,6.580152 10.373233,6.801771 10.373233,7.075152 C 10.373233,7.348533 10.151614,7.570152 9.878233,7.570152 C 9.604852,7.570152 9.383233,7.348533 9.383233,7.075152 C 9.383233,6.801771 9.604852,6.580152 9.878233,6.580152 " />
+            
+            <path id="micro_btn_id_12"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 9.430577,7.873193 A 0.605000,0.605000 0 0,1 10.035577,8.478193 A 0.605000,0.605000 0 0,1 9.430577,9.083193 A 0.605000,0.605000 0 0,1 8.825577,8.478193 A 0.605000,0.605000 0 0,1 9.430577,7.873193 " />
+            <path id="micro_btn_id_4"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 9.945361,5.361690 A 0.495000,0.495000 0 0,1 10.440361,5.856690 A 0.495000,0.495000 0 0,1 9.945361,6.351690 A 0.495000,0.495000 0 0,1 9.450361,5.856690 A 0.495000,0.495000 0 0,1 9.945361,5.361690 " />
+            <path id="micro_btn_id_10"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 11.017271,5.972275 A 0.495000,0.495000 0 0,1 11.512271,6.467275 A 0.495000,0.495000 0 0,1 11.017271,6.962275 A 0.495000,0.495000 0 0,1 10.522271,6.467275 A 0.495000,0.495000 0 0,1 11.017271,5.972275 " />
+            <path id="micro_btn_id_5"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 10.991830,4.738384 A 0.495000,0.495000 0 0,1 11.486830,5.233384 A 0.495000,0.495000 0 0,1 10.991830,5.728384 A 0.495000,0.495000 0 0,1 10.496830,5.233384 A 0.495000,0.495000 0 0,1 10.991830,4.738384 " />
+            <path id="micro_btn_id_6"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 12.200279,4.738384 A 0.495000,0.495000 0 0,1 12.695279,5.233384 A 0.495000,0.495000 0 0,1 12.200279,5.728384 A 0.495000,0.495000 0 0,1 11.705279,5.233384 A 0.495000,0.495000 0 0,1 12.200279,4.738384 " />
+            <path id="micro_btn_id_9"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 12.206639,5.965914 A 0.495000,0.495000 0 0,1 12.701639,6.460914 A 0.495000,0.495000 0 0,1 12.206639,6.955914 A 0.495000,0.495000 0 0,1 11.711639,6.460914 A 0.495000,0.495000 0 0,1 12.206639,5.965914 " />
+            <path id="micro_btn_id_8"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 13.383287,6.341170 A 0.495000,0.495000 0 0,1 13.878287,6.836170 A 0.495000,0.495000 0 0,1 13.383287,7.331170 A 0.495000,0.495000 0 0,1 12.888287,6.836170 A 0.495000,0.495000 0 0,1 13.383287,6.341170 " />
+            <path id="micro_btn_id_7"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 13.376927,5.132720 A 0.495000,0.495000 0 0,1 13.871927,5.627720 A 0.495000,0.495000 0 0,1 13.376927,6.122720 A 0.495000,0.495000 0 0,1 12.881927,5.627720 A 0.495000,0.495000 0 0,1 13.376927,5.132720 " />
+          </g>
+          <g inkscape:groupmode="layer" id="56be4cc7-b9ef-4027-8e13-40e6545ea16c" inkscape:label="Circles 1"
+            style="stroke:#000000;" />
+          <g inkscape:groupmode="layer" id="834e45bb-d00a-4a5c-925e-c81c94546b2d" inkscape:label="Circles 2"
+            style="stroke:#000000;" />
+          <g inkscape:groupmode="layer" id="ae7e8192-be77-479c-a666-585ce447494d" inkscape:label="Squares 1"
+            style="stroke:#000000;" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="micro_video_container_childs">
+      <div style="align-items: center; background-color: antiquewhite;">
+        <video id="video_replay" autoplay width="100%" height="100%"> </video>
+      </div>
+
+
+      <div style="height: 1px;">
+        <svg style="margin-top: -26rem; margin-left: -35rem; z-index: 123123;" width="1990px" height="2660px"
+          viewBox="0.00000000 0.00000000 12 60" version="1.1" xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+          <g inkscape:groupmode="layer" id="85667243-1302-4a85-b3ac-c7bf39b332ec" inkscape:label="Toolpath Previews"
+            style="stroke:#000000;" />
+          <g inkscape:groupmode="layer" id="6554092a-16f5-47d7-b7be-55067ae167c6" inkscape:label="main"
+            style="stroke:#000000;">
+            <path
+              style="fill:transparent;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 4.610144,8.773670 A 0.500000,0.500000 0 0,0 5.110144,9.273670 L 14.110144,9.273670 A 0.500000,0.500000 0 0,0 14.610144,8.773670 L 14.610144,4.773670 A 0.500000,0.500000 0 0,0 14.110144,4.273670 L 5.110144,4.273670 A 0.500000,0.500000 0 0,0 4.610144,4.773670 L 4.610144,8.773670 " />
+            <path id="micro_btn_replay_id_1"
+              style='fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;'
+              d="M 6.604306,5.285865 A 0.495000,0.495000 0 0,1 7.099306,5.780865 A 0.495000,0.495000 0 0,1 6.604306,6.275865 A 0.495000,0.495000 0 0,1 6.109306,5.780865 A 0.495000,0.495000 0 0,1 6.604306,5.285865 " />
+            <path id="micro_btn_replay_id_2"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 7.816004,5.285865 A 0.495000,0.495000 0 0,1 8.311004,5.780865 A 0.495000,0.495000 0 0,1 7.816004,6.275865 A 0.495000,0.495000 0 0,1 7.321004,5.780865 A 0.495000,0.495000 0 0,1 7.816004,5.285865 " />
+            <path id="micro_btn_replay_id_3"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 8.875193,5.890090 A 0.495000,0.495000 0 0,1 9.370193,6.385090 A 0.495000,0.495000 0 0,1 8.875193,6.880090 A 0.495000,0.495000 0 0,1 8.380193,6.385090 A 0.495000,0.495000 0 0,1 8.875193,5.890090 " />
+            <path id="micro_btn_replay_id_11"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 9.878233,6.580152 C 10.151614,6.580152 10.373233,6.801771 10.373233,7.075152 C 10.373233,7.348533 10.151614,7.570152 9.878233,7.570152 C 9.604852,7.570152 9.383233,7.348533 9.383233,7.075152 C 9.383233,6.801771 9.604852,6.580152 9.878233,6.580152 " />
+            a
+            <path id="micro_btn_replay_id_12"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 9.430577,7.873193 A 0.605000,0.605000 0 0,1 10.035577,8.478193 A 0.605000,0.605000 0 0,1 9.430577,9.083193 A 0.605000,0.605000 0 0,1 8.825577,8.478193 A 0.605000,0.605000 0 0,1 9.430577,7.873193 " />
+            <path id="micro_btn_replay_id_4"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 9.945361,5.361690 A 0.495000,0.495000 0 0,1 10.440361,5.856690 A 0.495000,0.495000 0 0,1 9.945361,6.351690 A 0.495000,0.495000 0 0,1 9.450361,5.856690 A 0.495000,0.495000 0 0,1 9.945361,5.361690 " />
+            <path id="micro_btn_replay_id_10"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 11.017271,5.972275 A 0.495000,0.495000 0 0,1 11.512271,6.467275 A 0.495000,0.495000 0 0,1 11.017271,6.962275 A 0.495000,0.495000 0 0,1 10.522271,6.467275 A 0.495000,0.495000 0 0,1 11.017271,5.972275 " />
+            <path id="micro_btn_replay_id_5"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 10.991830,4.738384 A 0.495000,0.495000 0 0,1 11.486830,5.233384 A 0.495000,0.495000 0 0,1 10.991830,5.728384 A 0.495000,0.495000 0 0,1 10.496830,5.233384 A 0.495000,0.495000 0 0,1 10.991830,4.738384 " />
+            <path id="micro_btn_replay_id_6"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 12.200279,4.738384 A 0.495000,0.495000 0 0,1 12.695279,5.233384 A 0.495000,0.495000 0 0,1 12.200279,5.728384 A 0.495000,0.495000 0 0,1 11.705279,5.233384 A 0.495000,0.495000 0 0,1 12.200279,4.738384 " />
+            <path id="micro_btn_replay_id_9"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 12.206639,5.965914 A 0.495000,0.495000 0 0,1 12.701639,6.460914 A 0.495000,0.495000 0 0,1 12.206639,6.955914 A 0.495000,0.495000 0 0,1 11.711639,6.460914 A 0.495000,0.495000 0 0,1 12.206639,5.965914 " />
+            <path id="micro_btn_replay_id_8"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 13.383287,6.341170 A 0.495000,0.495000 0 0,1 13.878287,6.836170 A 0.495000,0.495000 0 0,1 13.383287,7.331170 A 0.495000,0.495000 0 0,1 12.888287,6.836170 A 0.495000,0.495000 0 0,1 13.383287,6.341170 " />
+            <path id="micro_btn_replay_id_7"
+              style="fill:none;stroke-width:0.010000;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1;stroke:#000000;"
+              d="M 13.376927,5.132720 A 0.495000,0.495000 0 0,1 13.871927,5.627720 A 0.495000,0.495000 0 0,1 13.376927,6.122720 A 0.495000,0.495000 0 0,1 12.881927,5.627720 A 0.495000,0.495000 0 0,1 13.376927,5.132720 " />
+          </g>
+          <g inkscape:groupmode="layer" id="56be4cc7-b9ef-4027-8e13-40e6545ea16c" inkscape:label="Circles 1"
+            style="stroke:#000000;" />
+          <g inkscape:groupmode="layer" id="834e45bb-d00a-4a5c-925e-c81c94546b2d" inkscape:label="Circles 2"
+            style="stroke:#000000;" />
+          <g inkscape:groupmode="layer" id="ae7e8192-be77-479c-a666-585ce447494d" inkscape:label="Squares 1"
+            style="stroke:#000000;" />
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
+
+  <div>
+    <button id="start-record">Start Recording</button>
+    <button id="stop-record" disabled>Stop Recording</button>
+    <button id="play">Play</button>
+    <a id="download-link" href="#" download="recording.webm" style="display: none;">Download</a>
+  </div>
+  <div>
+    <button id="Start_Stop_live_Action">Start Live Logging</button>
+  </div>
+
+  <script>
+    const video_record = document.getElementById('video_record');
+    const recordedVideo = document.getElementById('video_replay');
+    const startRecordButton = document.getElementById('start-record');
+    const stopRecordButton = document.getElementById('stop-record');
+    const downloadLink = document.getElementById('download-link');
+    const videoSelect = document.getElementById('video-select');
+    var startTime = 0;
+
+    let mediaRecorder;
+    let recordedBlobs = [];
+
+    async function populateDeviceLists() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        devices.forEach(device => {
+          if (device.kind === 'videoinput') {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `camera ${videoSelect.length + 1}`;
+            console.log(device);
+            videoSelect.add(option);
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching devices:', error);
+      }
+    }
+
+    populateDeviceLists();
+
+    startRecordButton.addEventListener('click', startRecording);
+    stopRecordButton.addEventListener('click', stopRecording);
+
+    async function startRecording() {
+      startRecordButton.disabled = true;
+      stopRecordButton.disabled = false;
+
+      const selectedVideo = videoSelect.value;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: selectedVideo },
+        });
+        video_record.srcObject = stream;
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+        mediaRecorder.ondataavailable = handleDataAvailable;
+        // mediaRecorder.onstop = handleStop;
+
+        mediaRecorder.start();
+        startTime = new Date().getTime();
+      } catch (error) {
+        console.error('Error accessing webcam:', error);
+      }
+    }
+
+    function handleDataAvailable(event) {
+      console.log('da')
+      recordedBlobs.push(event.data);
+    }
+
+    function handleStop() {
+      const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+
+      downloadLink.href = url;
+      downloadLink.style.display = 'block';
+      downloadLink.setAttribute('download', true)
+      downloadLink.click()
+
+      recordedBlobs = [];
+      mediaRecorder = null;
+
+      startRecordButton.disabled = false;
+      stopRecordButton.disabled = true;
+    }
+
+    function stopRecording() {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+
+        video_record.src = null;
+        video_record.srcObject = null;
+
+        startRecordButton.disabled = false;
+        stopRecordButton.disabled = true;
+
+        recordedBlobs = [];
+        mediaRecorder = null;
+      }
+    }
+
+    const playButton = document.querySelector('button#play');
+    playButton.addEventListener('click', () => 
+    {
+      // const mimeType = codecPreferences.options[codecPreferences.selectedIndex].value.split(';', 1)[0];
+      const superBuffer = new Blob(recordedBlobs, { type: 'video/webm' });
+      recordedVideo.src = null;
+      recordedVideo.srcObject = null;
+      recordedVideo.src = window.URL.createObjectURL(superBuffer);
+      recordedVideo.controls = true;
+      recordedVideo.play();
+
+      // Replay button actions
+      for (let i = 0; i < ButtonRecordArray.length; i++) 
+      {
+        setTimeout(() => {
+          for (var j = 0; j < 12; j++) 
+          {
+            if (ButtonRecordArray[i].button & (1 << j)) 
+            {
+              lightonButtonWhenPressed((j + 1), true, true);
+            }
+            else {
+              lightonButtonWhenPressed((j + 1), false, true);
+            }
+          }
+        }, ButtonRecordArray[i].time);
+      }
+      
+    });
+  </script>
+
+</body>
+
+</html>
