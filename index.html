@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -13,13 +13,17 @@
         <span>
           <label for="selectVideo">Select Video</label>
           <select id="selectVideo"></select>
-          </span>
-          <span>
+        </span>
+        <span>
+          <label for="selectAudio">Select Audio</label>
+          <select id="selectAudio"></select>
+        </span>
+        <span>
           <button type="button" id="scan">Connect Micro</button>
           <select aria-labelledby="scan" id="selectDevice"></select>
-          </span>
-          <h2>Replay Information</h2>
-          <form>
+        </span>
+        <h2>Replay Information</h2>
+        <form>
           <div class="field">
             <label for="game">Game</label>
             <input id="game" name="game" type="text" value="" />
@@ -39,48 +43,60 @@
           <textarea hidden id="buttons"></textarea>
         </form>
         <h2>Record and Save</h2>
-        <button type="button" id="toggleRecording">Start Video</button>
-        <button type="button" id="toggleLogging">Start Logging</button>
+        <button type="button" id="toggleRecording">Record</button>
+        <button type="button" id="toggleLogging">Start Micro Logging</button>
         <button type="button" id="play">Preview</button>
-        <button type="button" id="downloadVideo">Download Video</button>    
-
+        <div class="download">
+          <button type="button" id="downloadVideo">Download Video</button>
+          <button type="button" id="downloadJson">Download JSON</button>
+        </div>
       </aside>
 
       <section data-frame="1">
-        <video data-video id="recordVideo" autoplay width="100%" height="auto"> </video>
-          <span data-id="1" class="btn"></span>
-          <span data-id="2" class="btn"></span>
-          <span data-id="3" class="btn"></span>
-          <span data-id="4" class="btn"></span>
-          <span data-id="5" class="btn"></span>
-          <span data-id="6" class="btn"></span>
-          <span data-id="7" class="btn"></span>
-          <span data-id="8" class="btn"></span>
-          <span data-id="9" class="btn"></span>
-          <span data-id="10" class="btn"></span>
-          <span data-id="11" class="btn"></span>
-          <span data-id="12" class="btn"></span>
+        <video
+          data-video
+          id="recordVideo"
+          autoplay
+          width="100%"
+          height="auto"
+        ></video>
+        <span data-id="1" class="btn"></span>
+        <span data-id="2" class="btn"></span>
+        <span data-id="3" class="btn"></span>
+        <span data-id="4" class="btn"></span>
+        <span data-id="5" class="btn"></span>
+        <span data-id="6" class="btn"></span>
+        <span data-id="7" class="btn"></span>
+        <span data-id="8" class="btn"></span>
+        <span data-id="9" class="btn"></span>
+        <span data-id="10" class="btn"></span>
+        <span data-id="11" class="btn"></span>
+        <span data-id="12" class="btn"></span>
       </section>
 
       <section data-frame="2">
-        <video data-video id="playVideo" autoplay width="100%" height="auto"> </video>
-          <span data-id="1" class="btn"></span>
-          <span data-id="2" class="btn"></span>
-          <span data-id="3" class="btn"></span>
-          <span data-id="4" class="btn"></span>
-          <span data-id="5" class="btn"></span>
-          <span data-id="6" class="btn"></span>
-          <span data-id="7" class="btn"></span>
-          <span data-id="8" class="btn"></span>
-          <span data-id="9" class="btn"></span>
-          <span data-id="10" class="btn"></span>
-          <span data-id="11" class="btn"></span>
-          <span data-id="12" class="btn"></span>
+        <video
+          data-video
+          id="playVideo"
+          autoplay
+          width="100%"
+          height="auto"
+        ></video>
+        <span data-id="1" class="btn"></span>
+        <span data-id="2" class="btn"></span>
+        <span data-id="3" class="btn"></span>
+        <span data-id="4" class="btn"></span>
+        <span data-id="5" class="btn"></span>
+        <span data-id="6" class="btn"></span>
+        <span data-id="7" class="btn"></span>
+        <span data-id="8" class="btn"></span>
+        <span data-id="9" class="btn"></span>
+        <span data-id="10" class="btn"></span>
+        <span data-id="11" class="btn"></span>
+        <span data-id="12" class="btn"></span>
       </section>
-
-
     </main>
 
-  <script type="module" src="/main.js"></script>
+    <script type="module" src="/main.js"></script>
   </body>
 </html>

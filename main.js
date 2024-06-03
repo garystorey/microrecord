@@ -1,5 +1,6 @@
 import "./style.css";
 import { saveAs } from "file-saver";
+
 const primaryServiceUUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const characteristicUUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
@@ -7,14 +8,18 @@ let recordVideo,
   playVideo,
   toggleRecordingButton,
   downloadVideo,
+  downloadJson,
   selectVideo,
+  selectAudio,
+  selectDevice,
   playButton,
   scanButton,
   toggleLogging,
   gameName,
   characterName,
   description,
-  videoName;
+  videoName,
+  jsonData;
 
 let server = null;
 let characteristic = null;
@@ -37,32 +42,40 @@ async function populateDeviceLists() {
         option.text = device.label || `camera ${i + 1}`;
         selectVideo.add(option);
       }
+      if (device.kind === "audioinput") {
+        const option = document.createElement("option");
+        option.value = device.deviceId;
+        option.text = device.label || `camera ${i + 1}`;
+        selectAudio.add(option);
+      }
     });
+    selectVideo.value = localStorage.getItem("sbmicro-video-src");
+    selectAudio.value = localStorage.getItem("sbmicro-audio-src");
   } catch (error) {
-    console.error("Error fetching video devices:", error);
+    console.error("Error fetching video/audio devices:", error);
   }
 }
 
 async function startRecording() {
-  toggleRecordingButton.textContent = "Stop Video";
-
+  toggleRecordingButton.textContent = "Stop";
+  localStorage.setItem("sbmicro-video-src", selectVideo.value);
+  localStorage.setItem("sbmicro-audio-src", selectAudio.value);
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: selectVideo.value },
-      audio: true,
+      audio: { deviceId: selectAudio.value },
     });
     recordVideo.srcObject = stream;
     mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
     mediaRecorder.start();
     mediaRecorder.addEventListener("dataavailable", handleDataAvailable);
     startTime = new Date().getTime();
+    setTimeout(() => {
+      toggleLogging.click();
+    }, 500);
   } catch (error) {
     console.error("Error accessing webcam:", error);
   }
-}
-
-function handleDataAvailable(event) {
-  videoData.push(event.data);
 }
 
 function replaceAll(from) {
@@ -89,26 +102,38 @@ async function stopRecording() {
 
     recordVideo.src = null;
     recordVideo.srcObject = null;
-    const filename = getBaseFileName();
 
-    const jsonData = JSON.stringify({
+    jsonData = JSON.stringify({
       game: gameName.value || "",
+      startTime,
+      device: selectDevice.value,
       character: characterName.value || "",
       description: description.value || "",
       video: videoName.value || "",
       buttons: buttonData || [],
     });
-    toggleRecordingButton.textContent = "Start Video";
-
-    let fileHandle = await window.showSaveFilePicker({
-      suggestedName: filename + ".json",
-    });
-    const fileStream = await fileHandle.createWritable();
-    await fileStream.write(new Blob([jsonData], { type: "text/plain" }));
-    await fileStream.close();
-    fileHandle = null;
+    toggleRecordingButton.textContent = "Record";
     mediaRecorder = null;
   }
+}
+
+async function handleDownloadJson(e) {
+  e.preventDefault();
+  const blob = new Blob([jsonData], { type: "application/json" });
+  saveAs(blob, getBaseFileName() + ".json");
+  // const fileHandle = await window.showSaveFilePicker({
+  //   suggestedName: filename + ".json",
+  // });
+  // const fileStream = await fileHandle.createWritable();
+  // await fileStream.write(new Blob([jsonData], { type: "text/plain" }));
+  // await fileStream.close();
+  // fileHandle = null;
+}
+
+function handleDownloadVideo(e) {
+  e.preventDefault();
+  const videoBlob = new Blob(videoData, { type: "video/webm" });
+  saveAs(videoBlob, getBaseFileName() + ".webm");
 }
 
 function handlePlayButton(e) {
@@ -130,13 +155,13 @@ function handlePlayButton(e) {
   for (let i = 0; i < buttonData.length; i++) {
     setTimeout(() => {
       for (var j = 0; j < 12; j++) {
-        lightonButtonWhenPressed(j + 1, buttonData[i].button & (1 << j), true);
+        isButtonPressed(j + 1, buttonData[i].button & (1 << j), true);
       }
     }, buttonData[i].time);
   }
 }
 
-async function lightonButtonWhenPressed(btn_number, setColor, replay) {
+async function isButtonPressed(btn_number, setColor, replay) {
   const path = `[data-frame="${replay ? "2" : "1"}"] [data-id="${btn_number}"]`;
   const el = document.querySelector(path);
   if (el) {
@@ -164,16 +189,14 @@ function handleNotifications(event) {
     });
 
     for (var i = 0; i < 12; i++) {
-      lightonButtonWhenPressed(i + 1, res & (1 << i), false);
+      isButtonPressed(i + 1, res & (1 << i), false);
     }
   }
 }
 
-async function toggleMicroLogging(e) {
-  e.preventDefault();
+async function sendLoggingCommand() {
   try {
     isRecording = !isRecording;
-    this.textContent = isRecording ? "Stop Logging" : "Start Logging";
     const command = Uint8Array.of(
       0x24,
       0x32,
@@ -183,6 +206,15 @@ async function toggleMicroLogging(e) {
       0x23
     );
     return await characteristic.writeValue(command);
+  } catch (err) {
+    console.error("Failed to write value to characteristic:", err);
+  }
+}
+
+async function toggleMicroLogging(e) {
+  e.preventDefault();
+  try {
+    await sendLoggingCommand();
   } catch (err) {
     console.error("Failed to write value to characteristic:", err);
   }
@@ -197,6 +229,10 @@ async function toggleRecording(e) {
   }
 }
 
+function handleDataAvailable(event) {
+  videoData.push(event.data);
+}
+
 async function handleBluetooth() {
   device = await navigator.bluetooth.requestDevice({
     filters: [{ services: [primaryServiceUUID] }],
@@ -204,7 +240,7 @@ async function handleBluetooth() {
   const option = document.createElement("option");
   option.text = device.name;
   option.value = device.id;
-  document.querySelector("#selectDevice").add(option);
+  selectDevice.add(option);
   server = await device.gatt.connect();
   console.log("Connected to GATT server");
   service = await server.getPrimaryService(primaryServiceUUID);
@@ -227,6 +263,8 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleRecordingButton = document.querySelector("#toggleRecording");
   downloadVideo = document.querySelector("#downloadVideo");
   selectVideo = document.querySelector("#selectVideo");
+  selectAudio = document.querySelector("#selectAudio");
+  selectDevice = document.querySelector("#selectDevice");
   playButton = document.querySelector("#play");
   scanButton = document.querySelector("#scan");
   toggleLogging = document.querySelector("#toggleLogging");
@@ -234,21 +272,16 @@ document.addEventListener("DOMContentLoaded", () => {
   characterName = document.querySelector("#character");
   description = document.querySelector("#desc");
   videoName = document.querySelector("#video");
+  downloadJson = document.querySelector("#downloadJson");
 
   scanButton.addEventListener("click", handleBluetooth);
   toggleLogging.addEventListener("click", toggleMicroLogging);
   playButton.addEventListener("click", handlePlayButton);
   toggleRecordingButton.addEventListener("click", toggleRecording);
 
-  downloadVideo.addEventListener("click", (e) => {
-    e.preventDefault();
-    const videoBlob = new Blob(videoData, { type: "video/webm" });
-    // const videoUrl = URL.createObjectURL(videoBlob);
-    // downloadVideo.href = videoUrl;
-    // downloadVideo.setAttribute("download", filename + ".webm");
-    downloadVideo.textContent = "Download Video";
-    saveAs(videoBlob, getBaseFileName() + ".webm");
-  });
+  downloadVideo.addEventListener("click", handleDownloadVideo);
+
+  downloadJson.addEventListener("click", handleDownloadJson);
 
   gameName.addEventListener("change", updateVideoName);
   characterName.addEventListener("change", updateVideoName);
