@@ -117,23 +117,12 @@ async function stopRecording() {
   }
 }
 
-async function handleDownloadJson(e) {
-  e.preventDefault();
-  const blob = new Blob([jsonData], { type: "application/json" });
-  saveAs(blob, getBaseFileName() + ".json");
-  // const fileHandle = await window.showSaveFilePicker({
-  //   suggestedName: filename + ".json",
-  // });
-  // const fileStream = await fileHandle.createWritable();
-  // await fileStream.write(new Blob([jsonData], { type: "text/plain" }));
-  // await fileStream.close();
-  // fileHandle = null;
-}
-
 function handleDownloadVideo(e) {
   e.preventDefault();
   const videoBlob = new Blob(videoData, { type: "video/webm" });
   saveAs(videoBlob, getBaseFileName() + ".webm");
+  const blob = new Blob([jsonData], { type: "application/json" });
+  saveAs(blob, getBaseFileName() + ".json");
 }
 
 function handlePlayButton(e) {
@@ -272,7 +261,6 @@ document.addEventListener("DOMContentLoaded", () => {
   characterName = document.querySelector("#character");
   description = document.querySelector("#desc");
   videoName = document.querySelector("#video");
-  downloadJson = document.querySelector("#downloadJson");
 
   scanButton.addEventListener("click", handleBluetooth);
   toggleLogging.addEventListener("click", toggleMicroLogging);
@@ -280,8 +268,6 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleRecordingButton.addEventListener("click", toggleRecording);
 
   downloadVideo.addEventListener("click", handleDownloadVideo);
-
-  downloadJson.addEventListener("click", handleDownloadJson);
 
   gameName.addEventListener("change", updateVideoName);
   characterName.addEventListener("change", updateVideoName);
