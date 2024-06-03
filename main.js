@@ -8,7 +8,7 @@ let recordVideo,
   playVideo,
   toggleRecordingButton,
   downloadVideo,
-  downloadJson,
+  openOriginal,
   selectVideo,
   selectAudio,
   selectDevice,
@@ -246,6 +246,11 @@ async function handleBluetooth() {
   }
 }
 
+function handleOpenOriginal(e) {
+  e.preventDefault();
+  window.open("original.html");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   recordVideo = document.querySelector("#recordVideo");
   playVideo = document.querySelector("#playVideo");
@@ -261,6 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
   characterName = document.querySelector("#character");
   description = document.querySelector("#desc");
   videoName = document.querySelector("#video");
+  openOriginal = document.querySelector("#openOriginal");
 
   scanButton.addEventListener("click", handleBluetooth);
   toggleLogging.addEventListener("click", toggleMicroLogging);
@@ -272,6 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
   gameName.addEventListener("change", updateVideoName);
   characterName.addEventListener("change", updateVideoName);
   description.addEventListener("change", updateVideoName);
+  openOriginal.addEventListener("click", handleOpenOriginal);
 
   populateDeviceLists();
 });
