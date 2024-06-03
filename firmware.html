@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firmware Update</title>
+    <style>
+        button {
+            border: none;
+            background-color: #89C8FF;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+
+        .main_app {
+            display: flex;
+            justify-content: left;
+            /* padding: 40px; */
+
+        }
+
+        .left_pane {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 40%;
+            height: 100%;
+            background-color: #f4f4f4;
+            padding: 20px;
+            z-index: 12312321;
+
+            /* border: 2px saddlebrown solid; */
+
+        }
+
+        .right_pane {
+            display: flex;
+            width: 80%;
+
+            height: 400px;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        svg{
+            width: 100%;
+            height: 100%;
+            margin-top: -10rem;
+            /* margin-left: -35rem; */
+            /* position: relative; */
+        }
+    </style>
+
+    <script>
+        // Define UUID global variables
+        const primaryServiceUUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+        const characteristicUUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+
+        var gserver = null;
+        var gcharacteristic = null;
+        var gservice = null;
+        var AckResponse = 0;
+
+        // 05.17 firmware
+        var fotaURL = "https://firebasestorage.googleapis.com/v0/b/microtesting-7ca91.appspot.com/o/ArduinoMicro2_OTA_05_17.bin?alt=media&token=0e8f5bfc-35c7-4c10-ae22-19fba5abdaa9"
+        function sleep(ms) 
+        {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+
+        function BleResponseParser(response)
+        {
+            var inputData = new Uint8Array(response.buffer);
+            var packetType = inputData[1];
+
+            if(packetType == 0x13)
+            {
+                console.log("Packet type: 0x13");
+                var firmwareVersion = String.fromCharCode(inputData[5]) + String.fromCharCode(inputData[6]) + String.fromCharCode(inputData[7]) + String.fromCharCode(inputData[8]) + String.fromCharCode(inputData[9]);
+                document.querySelector('#Firmware_version').textContent = "Micro version: " + firmwareVersion;
+            }
+            else if(packetType == 0x24)
+            {
+                console.log("Packet type: 0x24");
+                var serialNumber = String.fromCharCode(inputData[5]) + String.fromCharCode(inputData[6]) + String.fromCharCode(inputData[7]) + String.fromCharCode(inputData[8]) + String.fromCharCode(inputData[9]);
+                document.querySelector('#Serial_Number').textContent = "Serial Number: " + serialNumber;
+            }
+        }
+
+        function handleNotifications(event) 
+        {
+            const value = event.target.value;
+            console.log("value  :",value);
+            var inputData = new Uint8Array(value.buffer);
+            
+            var v1 = '';
+            for (var i = 0; i < inputData.byteLength; i++) 
+            {
+                v1 += inputData[i].toString(16).toUpperCase().padStart(2, '0');
+                v1 += ' ';
+            }
+            
+            console.log("v1  :",v1);
+
+            if(inputData[3] == 0x30)
+            {
+                document.querySelector('#Ack_Nack').textContent = "Ack/Nack: " + v1;
+                AckResponse = 1;
+                if(inputData[2] == 0x02)
+                {
+                    document.querySelector('#editmode').textContent = "Edit Mode: Enabled";
+                }
+            }
+            else if(inputData[3] == 0x31)
+            {
+                document.querySelector('#data_div').textContent =  "Data: " + v1;
+                BleResponseParser(value);
+            }            
+        }
+
+        async function SendWifiCredentials(lssid, lpassword)
+        {
+            var ssid = lssid;
+            var password = lpassword;
+
+            var ssidLength = ssid.length;
+            var passwordLength = password.length;
+
+            var encoder = new TextEncoder();
+            var ssidArray = encoder.encode(ssid);
+            var passwordArray = encoder.encode(password);
+            var fotaURLArray = encoder.encode(fotaURL);
+
+            //================================================================================================
+            // creat SSID payload
+            //================================================================================================
+            // var ssidpayload = new Uint8Array(0x24, 0x25, ssidLength+1, 0x01, ssidArray, 0x23);
+            var ssidpayload = new Uint8Array(ssidArray.length + 5);
+            ssidpayload[0] = 0x24;
+            ssidpayload[1] = 0x25;
+            ssidpayload[2] = ssidArray.length + 1;
+            ssidpayload[3] = 0x01;
+
+            for (var i = 0; i < ssidArray.length; i++) 
+            {
+                ssidpayload[i + 4] = ssidArray[i];
+            }
+
+            ssidpayload[ssidArray.length + 4] = 0x23;
+
+            //================================================================================================
+            // creat password payload
+            //================================================================================================
+            // var passwordpayload = new Uint8Array(0x24, 0x26, passwordLength+1, 0x01, passwordArray, 0x23);
+            var passwordpayload = new Uint8Array(passwordArray.length + 5);
+            passwordpayload[0] = 0x24;
+            passwordpayload[1] = 0x26;
+            passwordpayload[2] = passwordArray.length + 1;
+            passwordpayload[3] = 0x01;
+
+            for (var i = 0; i < passwordArray.length; i++) 
+            {
+                passwordpayload[i + 4] = passwordArray[i];
+            }
+
+            passwordpayload[passwordArray.length + 4] = 0x23;
+
+            //================================================================================================
+            // creat FOTA URL payload
+            //================================================================================================
+            // var urlpayload = new Uint8Array(0x24, 0x27, fotaURL.length+3, 0x01, 0x01, 0x01, fotaURL, 0x23);
+            var urlpayload = new Uint8Array(fotaURLArray.length + 7);
+            urlpayload[0] = 0x24;
+            urlpayload[1] = 0x27;
+            urlpayload[2] = fotaURLArray.length + 3;
+            urlpayload[3] = 0x01;
+            urlpayload[4] = 0x01;
+            urlpayload[5] = 0x01;
+
+            for (var i = 0; i < fotaURLArray.length; i++) 
+            {
+                urlpayload[i + 6] = fotaURLArray[i];
+            }
+
+            urlpayload[fotaURLArray.length + 6] = 0x23;
+
+            //================================================================================================
+            // Send the SSID
+            //================================================================================================
+            console.log("Writing ssidpayload  :",ssidpayload);
+            AckResponse = 0;
+            gcharacteristic.writeValue(ssidpayload)
+            .then(() => {
+                console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+                console.log('Failed to write value to characteristic:', error);
+            });
+
+            await sleep(1000);
+
+            if(AckResponse == 1)
+            {
+                console.log("WiFi credentials sent successfully");
+            }
+            else
+            {
+                console.log("WiFi credentials not sent");
+            }
+
+            //================================================================================================
+            // Send the password
+            //================================================================================================
+            console.log("Writing passwordpayload  :",passwordpayload);
+            AckResponse = 0;
+            gcharacteristic.writeValue(passwordpayload)
+            .then(() => {
+                console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+                console.log('Failed to write value to characteristic:', error);
+            });
+
+            await sleep(1000);
+
+            if(AckResponse == 1)
+            {
+                console.log("WiFi credentials sent successfully");
+            }
+            else
+            {
+                console.log("WiFi credentials not sent");
+            }
+
+            //================================================================================================
+            // Send the FOTA URL
+            //================================================================================================
+            console.log("Writing urlpayload  :",urlpayload);
+            AckResponse = 0;
+            gcharacteristic.writeValue(urlpayload)
+            .then(() => {
+                console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+                console.log('Failed to write value to characteristic:', error);
+            });
+
+            await sleep(4000);
+
+            if(AckResponse == 1)
+            {
+                console.log("FOTA URL sent successfully");
+            }
+            else
+            {
+                console.log("FOTA URL not sent");
+            }
+
+            //================================================================================================
+            // Send the WIFI connection command
+            //================================================================================================
+            var connectionStatus = Uint8Array.of(0x24, 0x28, 0x01, 0x00, 0x23);
+            console.log("Writing connectionStatus  :",connectionStatus);
+            AckResponse = 0;
+            gcharacteristic.writeValue(connectionStatus)
+            .then(() => {
+                console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+                console.log('Failed to write value to characteristic:', error);
+            });
+
+            await sleep(10000);
+
+            if(AckResponse == 1)
+            {
+                console.log("WiFi connection command sent successfully");
+            }
+            else
+            {
+                console.log("WiFi connection command not sent");
+            }
+
+            //================================================================================================
+            // Send the FOTA command
+            //================================================================================================
+            var fotaCommand = Uint8Array.of(0x24, 0x29, 0x01, 0x00, 0x23);
+            console.log("Writing fotaCommand  :",fotaCommand);
+            AckResponse = 0;
+            gcharacteristic.writeValue(fotaCommand)
+            .then(() => {
+                console.log('Value written to characteristic successfully');
+            })
+            .catch(error => {
+                console.log('Failed to write value to characteristic:', error);
+            });
+
+            await sleep(1000);
+
+            if(AckResponse == 1)
+            {
+                console.log("FOTA command sent successfully");
+            }
+            else
+            {
+                console.log("FOTA command not sent");
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', (event) => 
+        {
+            document.querySelector('#scan').addEventListener('click', function() 
+            {
+                navigator.bluetooth.requestDevice({ filters: [{ services: [primaryServiceUUID] }] })
+                .then(device => {
+                    var option = document.createElement('option');
+                    option.text = device.name;
+                    option.value = device.id;
+                    document.querySelector('#devices').textContent = "Connected: " + device.name;
+
+                    // Connect to GATT server
+                    device.gatt.connect()
+                    .then(server => {
+                        gserver = server;
+                        console.log('Connected to GATT server');
+                        // Get characteristics by UUID
+                        return server.getPrimaryService(primaryServiceUUID);
+                    })
+                    .then(service => {
+                        gservice = service;
+                        return service.getCharacteristic(characteristicUUID);
+                    })
+                    .then(characteristic => {
+                        gcharacteristic = characteristic;
+                        
+                        // Read the value of the characteristic
+                        characteristic.startNotifications()
+                        .then(() => {
+                            console.log('Notifications enabled for characteristic');
+                            // Handle notifications
+                            characteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+                        })
+                        .catch(error => {
+                            console.log('Failed to enable notifications for characteristic:', error);
+                        });
+
+                            const resetEnergyExpended = Uint8Array.of(0x24, 0x13, 0x01, 0x00, 0x23);
+                            characteristic.writeValue(resetEnergyExpended)
+                            .then(() => {
+                                console.log('Value written to characteristic successfully');
+                            })
+                            .catch(error => {
+                                console.log('Failed to write value to characteristic:', error);
+                            });
+
+                    //         await sleep(2000);
+
+                    //         const serialNumberCommand = Uint8Array.of(0x24, 0x24, 0x01, 0x00, 0x23);
+                    //         characteristic.writeValue(serialNumberCommand)
+                    //         .then(() => {
+                    //             console.log('Value written to characteristic successfully');
+                    //         })
+                    //         .catch(error => {
+                    //             console.log('Failed to write value to characteristic:', error);
+                    //         });
+                    })
+                    .then(value => {
+                        console.log('Characteristic value:', value);
+                        document.querySelector('#output').textContent = new TextDecoder().decode(value);
+                        // Perform further operations with the value
+                    })
+                    .catch(error => {
+                        console.log('Failed to connect to GATT server:', error);
+                    });
+                })
+                .catch(error => { console.log(error); });
+            });
+
+            document.querySelector('#submitt').addEventListener('click', function() 
+            {
+                var ssid = document.querySelector('#wifissid').value;
+                var password = document.querySelector('#wifipassword').value;
+
+                SendWifiCredentials(ssid, password);
+
+            });
+
+        });
+    </script>
+</head>
+
+
+<body>
+    <div class="main_app">
+        <div class="left_pane">
+            <button id="scan">Scan for devices</button>
+            <div id="devices" style="text-align: center; font-size: 20px;">Connected:</div>
+            <div id="output"></div>
+            <div id="data_div" style="background-color: burlywood;"></div>
+            <div id="Ack_Nack" style="background-color: cadetblue;"></div>
+        </div>
+    </div>
+
+    <div id="Firmware_version" style="text-align: left; font-size: 20px; margin-top: 20px; background-color: #a3e2b8; width: 40%;">Micro version: </div>
+    <div id="Serial_Number" style="text-align: left; font-size: 20px; margin-top: 20px; background-color: #a3e2b8; width: 40%;">Serial Number: </div>
+    <div id="editmode" style="text-align: left; font-size: 20px; margin-top: 20px; background-color: #a3e2b8; width: 40%;">Edit Mode: Disabled </div>
+
+    <div style="text-align: left; font-size: 20px; margin-top: 20px; background-color: #7f93b9; width: 40%;"> Enter WiFi SSID: <input type="text" id="wifissid" style="width: 40%; align-self: right;" placeholder="WiFi SSID"> </div>
+    <div style="text-align: left; font-size: 20px; margin-top: 20px; background-color: #7f93b9; width: 40%;"> Enter WiFi Password: <input type="text" id="wifipassword" style="width: 40%; align-self: right;" placeholder="WiFi Password"> </div>
+    <div style="text-align: left; font-size: 20px; margin-top: 20px;"> <button id="submitt">Submitt</button> </div>
+</body>
+</html>

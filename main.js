@@ -9,6 +9,7 @@ let recordVideo,
   toggleRecordingButton,
   downloadVideo,
   openOriginal,
+  openFirmware,
   selectVideo,
   selectAudio,
   selectDevice,
@@ -18,19 +19,18 @@ let recordVideo,
   gameName,
   characterName,
   description,
-  videoName,
-  jsonData;
-
-let server = null;
-let characteristic = null;
-let service = null;
-let device = null;
-let isRecording = false;
-let videoIsRecording = false;
-let buttonData = [];
-let startTime = 0;
-let mediaRecorder;
-let videoData = [];
+  jsonData,
+  server = null,
+  characteristic = null,
+  service = null,
+  device = null,
+  isRecording = false,
+  videoIsRecording = false,
+  buttonData = [],
+  videoData = [],
+  mediaRecorder,
+  startTime = 0,
+  endTime = 0;
 
 async function populateDeviceLists() {
   try {
@@ -53,6 +53,7 @@ async function populateDeviceLists() {
     selectAudio.value = localStorage.getItem("sbmicro-audio-src");
   } catch (error) {
     console.error("Error fetching video/audio devices:", error);
+    alert(error.message);
   }
 }
 
@@ -70,11 +71,10 @@ async function startRecording() {
     mediaRecorder.start();
     mediaRecorder.addEventListener("dataavailable", handleDataAvailable);
     startTime = new Date().getTime();
-    setTimeout(() => {
-      toggleLogging.click();
-    }, 500);
+    setTimeout(() => toggleLogging.click(), 250);
   } catch (error) {
-    console.error("Error accessing webcam:", error);
+    console.error("Error accessing video/audio:", error);
+    alert(error.message);
   }
 }
 
@@ -92,70 +92,98 @@ function getBaseFileName() {
   }_${replaceAll(description.value) || "?"}`;
 }
 
-function updateVideoName(e) {
-  videoName.value = getBaseFileName() + ".webm";
-}
-
 async function stopRecording() {
-  if (mediaRecorder) {
-    await mediaRecorder.stop();
+  try {
+    if (mediaRecorder) {
+      await mediaRecorder.stop();
+      endTime = new Date().getTime();
+      recordVideo.src = null;
+      recordVideo.srcObject = null;
+      mediaRecorder = null;
 
-    recordVideo.src = null;
-    recordVideo.srcObject = null;
+      const lastInput = buttonData.reduce(
+        (highest, val) => (val.time > highest ? val.time : highest),
+        0
+      );
+      const firstInput = buttonData.reduce(
+        (lowest, val) => (val.time < lowest ? val.time : lowest),
+        999999999
+      );
 
-    jsonData = JSON.stringify({
-      game: gameName.value || "",
-      startTime,
-      device: selectDevice.value,
-      character: characterName.value || "",
-      description: description.value || "",
-      video: videoName.value || "",
-      buttons: buttonData || [],
-    });
-    toggleRecordingButton.textContent = "Record";
-    mediaRecorder = null;
+      setTimeout(() => {
+        toggleLogging.click();
+        jsonData = JSON.stringify({
+          meta: {
+            device: selectDevice.value,
+            game: gameName.value || "",
+            character: characterName.value || "",
+            description: description.value || "",
+            startTime,
+            firstInput,
+            lastInput,
+            endTime: endTime - startTime,
+          },
+          video: getBaseFileName() + ".webm",
+          data: buttonData || [],
+        });
+        toggleRecordingButton.textContent = "Record";
+      }, 1);
+    }
+  } catch (error) {
+    console.error("Error occurred while trying to stop media device", error);
+    alert(error.message);
   }
 }
 
 function handleDownloadVideo(e) {
-  e.preventDefault();
-  const videoBlob = new Blob(videoData, { type: "video/webm" });
-  saveAs(videoBlob, getBaseFileName() + ".webm");
-  const blob = new Blob([jsonData], { type: "application/json" });
-  saveAs(blob, getBaseFileName() + ".json");
+  try {
+    e.preventDefault();
+    const videoBlob = new Blob(videoData, { type: "video/webm" });
+    saveAs(videoBlob, getBaseFileName() + ".webm");
+    const blob = new Blob([jsonData], { type: "application/json" });
+    saveAs(blob, getBaseFileName() + ".json");
+    videoData = [];
+    jsonData = "";
+  } catch (error) {
+    console.error(
+      "Error occurred while trying to create download files",
+      error
+    );
+    alert(error.message);
+  }
 }
 
 function handlePlayButton(e) {
   e.preventDefault();
-  console.log(videoData);
 
   if (videoData.length > 0) {
     const blob = new Blob(videoData, { type: "video/webm" });
-    playVideo.srcObject = null;
-    playVideo.src = "";
-    playVideo.src = window.URL.createObjectURL(blob);
-    playVideo.controls = true;
-    playVideo.play();
+    recordVideo.srcObject = null;
+    recordVideo.src = "";
+    recordVideo.src = window.URL.createObjectURL(blob);
+    recordVideo.controls = false;
+    recordVideo.play();
   } else {
     console.error("no video data");
+    alert("No Video Data");
   }
 
   // Replay button actions
   for (let i = 0; i < buttonData.length; i++) {
     setTimeout(() => {
       for (var j = 0; j < 12; j++) {
-        isButtonPressed(j + 1, buttonData[i].button & (1 << j), true);
+        isButtonPressed(j + 1, buttonData[i].button & (1 << j), false);
       }
     }, buttonData[i].time);
   }
 }
 
-async function isButtonPressed(btn_number, setColor, replay) {
-  const path = `[data-frame="${replay ? "2" : "1"}"] [data-id="${btn_number}"]`;
+function isButtonPressed(button, isPressed, isReplay) {
+  const path = `[data-frame="${isReplay ? "2" : "1"}"] [data-id="${button}"]`;
   const el = document.querySelector(path);
   if (el) {
-    el.style.borderColor = setColor ? "orange" : "white";
-    el.style.backgroundColor = setColor ? "orange" : "transparent";
+    el.style.borderColor = isPressed ? "orange" : "white";
+    el.style.backgroundColor = isPressed ? "orange" : "transparent";
   }
 }
 
@@ -195,8 +223,12 @@ async function sendLoggingCommand() {
       0x23
     );
     return await characteristic.writeValue(command);
-  } catch (err) {
-    console.error("Failed to write value to characteristic:", err);
+  } catch (error) {
+    console.error(
+      "Error occurred while trying to sstart/stop micro logging",
+      error
+    );
+    alert(error.message);
   }
 }
 
@@ -204,17 +236,21 @@ async function toggleMicroLogging(e) {
   e.preventDefault();
   try {
     await sendLoggingCommand();
-  } catch (err) {
-    console.error("Failed to write value to characteristic:", err);
+  } catch (error) {
+    console.error(
+      "Error occurred while trying towrite to characteristic",
+      error
+    );
+    alert(error.message);
   }
 }
 async function toggleRecording(e) {
   e.preventDefault();
   videoIsRecording = !videoIsRecording;
   if (videoIsRecording) {
-    startRecording();
+    await startRecording();
   } else {
-    stopRecording();
+    await stopRecording();
   }
 }
 
@@ -250,6 +286,10 @@ function handleOpenOriginal(e) {
   e.preventDefault();
   window.open("original.html");
 }
+function handleOpenFirmware(e) {
+  e.preventDefault();
+  window.open("firmware.html");
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   recordVideo = document.querySelector("#recordVideo");
@@ -265,20 +305,15 @@ document.addEventListener("DOMContentLoaded", () => {
   gameName = document.querySelector("#game");
   characterName = document.querySelector("#character");
   description = document.querySelector("#desc");
-  videoName = document.querySelector("#video");
   openOriginal = document.querySelector("#openOriginal");
+  openFirmware = document.querySelector("#openFirmware");
 
   scanButton.addEventListener("click", handleBluetooth);
   toggleLogging.addEventListener("click", toggleMicroLogging);
   playButton.addEventListener("click", handlePlayButton);
   toggleRecordingButton.addEventListener("click", toggleRecording);
-
   downloadVideo.addEventListener("click", handleDownloadVideo);
-
-  gameName.addEventListener("change", updateVideoName);
-  characterName.addEventListener("change", updateVideoName);
-  description.addEventListener("change", updateVideoName);
   openOriginal.addEventListener("click", handleOpenOriginal);
-
+  openFirmware.addEventListener("click", handleOpenFirmware);
   populateDeviceLists();
 });

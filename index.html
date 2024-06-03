@@ -36,10 +36,10 @@
             <label for="desc">Description</label>
             <input id="desc" name="desc" type="text" value="" />
           </div>
-          <div class="field">
+          <!-- <div class="field">
             <label for="video">Video Filename</label>
             <input id="video" name="video" type="text" value="" />
-          </div>
+          </div> -->
           <textarea hidden id="buttons"></textarea>
         </form>
         <h2>Record and Save</h2>
@@ -47,7 +47,10 @@
         <button type="button" id="toggleLogging">Start Micro Logging</button>
         <button type="button" id="play">Preview</button>
         <button type="button" id="downloadVideo">Download</button>
-        <button type="button" id="openOriginal">Open Original</button>
+        <div class="original">
+          <button type="button" id="openOriginal">Original Page</button>
+          <button type="button" id="openFirmware">Update Firmware</button>
+        </div>
       </aside>
 
       <section data-frame="1">
@@ -72,7 +75,7 @@
         <span data-id="12" class="btn"></span>
       </section>
 
-      <section data-frame="2">
+      <!-- <section data-frame="2">
         <video
           data-video
           id="playVideo"
@@ -92,7 +95,7 @@
         <span data-id="10" class="btn"></span>
         <span data-id="11" class="btn"></span>
         <span data-id="12" class="btn"></span>
-      </section>
+      </section> -->
     </main>
 
     <script type="module" src="/main.js"></script>

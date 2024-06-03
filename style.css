@@ -36,7 +36,7 @@ aside {
 
 main {
   display: grid;
-  grid-template-columns: 400px 1fr 1fr;
+  grid-template-columns: 360px 2fr 1fr;
   gap: 1rem;
   padding: 1rem;
 }
@@ -54,6 +54,7 @@ select {
   color: #333;
   max-width: 300px;
   min-width: 200px;
+  padding: 0.25rem 0.5rem;
 }
 
 button {
@@ -63,6 +64,7 @@ button {
   border-radius: 0.5rem;
   text-align: center;
   color: #eee;
+  cursor: pointer;
 }
 
 .screen {
@@ -93,11 +95,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-[data-frame] {
-  position: relative;
-  padding: 2rem;
 }
 
 video[data-video] {
@@ -137,10 +134,22 @@ video[data-video] {
   gap: 2rem;
 }
 
+#openOriginal,
+#openFirmware {
+  background-color: darkslategrey;
+}
+.original {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
 [data-frame] {
-  --bottom: 6rem;
-  --left: 10rem;
-  margin-bottom: 22rem; /* temp hack to move buttons up*/
+  --bottom: 0rem;
+  --left: 18rem;
+  position: relative;
+  padding: 2rem;
+  margin-bottom: 16rem; /* temp hack to move buttons up*/
 }
 
 [data-frame="1"] > [data-id="1"] {
