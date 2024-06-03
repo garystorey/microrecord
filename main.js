@@ -114,7 +114,6 @@ async function stopRecording() {
         toggleLogging.click();
         jsonData = JSON.stringify({
           meta: {
-            device: selectDevice.value,
             game: gameName.value || "",
             character: characterName.value || "",
             description: description.value || "",
