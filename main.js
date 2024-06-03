@@ -181,7 +181,7 @@ function isButtonPressed(button, isPressed, isReplay) {
   const path = `[data-frame="${isReplay ? "2" : "1"}"] [data-id="${button}"]`;
   const el = document.querySelector(path);
   if (el) {
-    el.style.borderColor = isPressed ? "orange" : "white";
+    el.style.borderColor = isPressed ? "orange" : "#666";
     el.style.backgroundColor = isPressed ? "orange" : "transparent";
   }
 }
